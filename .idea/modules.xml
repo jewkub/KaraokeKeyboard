@@ -2,7 +2,9 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/onekeyboard-android.iml" filepath="$PROJECT_DIR$/.idea/onekeyboard-android.iml" />
+      <module fileurl="file://$PROJECT_DIR$/androidHorizontalListView/androidHorizontalListView.iml" filepath="$PROJECT_DIR$/androidHorizontalListView/androidHorizontalListView.iml" />
+      <module fileurl="file://$PROJECT_DIR$/onekeyboard-android.iml" filepath="$PROJECT_DIR$/onekeyboard-android.iml" />
+      <module fileurl="file://$PROJECT_DIR$/softkeyboard/softkeyboard.iml" filepath="$PROJECT_DIR$/softkeyboard/softkeyboard.iml" />
     </modules>
   </component>
 </project>

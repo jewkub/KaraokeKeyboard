@@ -1,0 +1,2 @@
+include ':androidHorizontalListView'
+include ':softkeyboard'
