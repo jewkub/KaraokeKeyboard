@@ -22,7 +22,7 @@ import com.onekeyboard.ime.trie.*;
 public class Dictionary {
 	private static final String TAG = "Dictionary";
 	private Context mContext;
-	private Trie mTrie;
+	public static Trie mTrie;
 
 	/** Constructor */
 	public Dictionary(Context context, File dicPath){	
