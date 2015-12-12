@@ -1,16 +1,21 @@
 package com.onekeyboard.ime.trie;
 
 /**
- * Created by Jew on 11/30/2015.
+ * This file was created by Jew on 11/30/2015.
  */
 import android.util.Log;
 
+import com.onekeyboard.ime.SoftKeyboard;
+
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 
 public class Trie
 {
+    public static final int SIZE = 42;
+    public static final String TAG = "Dictionary";
     private TrieNode root;
 
     /**
@@ -23,12 +28,12 @@ public class Trie
 
     /**
      * Adds a word to the Trie
-     * @param phonetic
+     * @param phonetic the phonetic to add
      */
     public void addPhonetic(List<String> phonetic, String thai)
     {
         if(phonetic.size() == 0) return ;
-        List<String> z = new ArrayList<String>(phonetic);
+        LinkedList<String> z = new LinkedList<String>(phonetic);
         for (int i = 0; i < z.size(); i++) {
             char x;
             if(!z.get(i).isEmpty()) x = z.get(i).charAt(0);
@@ -39,25 +44,20 @@ public class Trie
     }
 
     /**
-     * Get the words in the Trie with the given
-     * prefix
-     * @param prefix
-     * @return a List containing String objects containing the words in
-     *         the Trie with the given prefix.
+     * Get the word in the Trie with the given phonetic
+     * @param phonetic a phonetic
+     * @return a String objects containing the word in the Trie with the given phonetic.
      */
-    public List<String> getPhonetics(String[] prefix)
+    public List<String> getWord(List<String> phonetic)
     {
-        //Find the node which represents the last letter of the prefix
         TrieNode curNode = root;
-        for (String e : prefix) {
+        for (String e : phonetic) {
+            e = e.toLowerCase();
             curNode = curNode.getNode(e);
-
             //If no node matches, then no words exist, return empty list
-            if (curNode == null) return new ArrayList();
+            if (curNode == null) return null;
         }
-
-        //Return the words which eminate from the last node
-        return curNode.getWords();
+        return curNode.getWord();
     }
 }
 

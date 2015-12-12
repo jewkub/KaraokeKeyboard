@@ -5,7 +5,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 import com.meetme.android.horizontallistview.HorizontalListView;
-import com.onekeyboard.dict.UnigramStr;
+//import com.onekeyboard.dict.UnigramStr;
 
 import android.content.Context;
 import android.util.AttributeSet;
@@ -25,7 +25,7 @@ public class SplitedCandidateView extends LinearLayout{
     private ArrayAdapter<CandidateGroup>	mInitialCandidateAdapter;
 
     private GridView						mSelectedInitialGridView;
-    private ArrayAdapter<UnigramStr>		mSelectedCandidateAdapter;
+    private ArrayAdapter<String>			mSelectedCandidateAdapter;
     
     private SoftKeyboard					mParent;
 	
@@ -64,7 +64,7 @@ public class SplitedCandidateView extends LinearLayout{
         });
         
         // Make an array adapter
-        mSelectedCandidateAdapter = new ArrayAdapter<UnigramStr>(mContext, R.layout.initial_candidate_textview, R.id.initial_text);
+        mSelectedCandidateAdapter = new ArrayAdapter<String>(mContext, R.layout.initial_candidate_textview, R.id.initial_text);
         
         mSelectedInitialGridView.setAdapter(mSelectedCandidateAdapter);
         
@@ -72,60 +72,45 @@ public class SplitedCandidateView extends LinearLayout{
 
 			@Override
 			public void onItemClick(AdapterView<?> adapter, View v, int position, long arg3) {
-				UnigramStr unigram = (UnigramStr) adapter.getItemAtPosition(position);
-				
-				mParent.commitSuggestion(unigram.getString());
+				mParent.commitSuggestion((String) adapter.getItemAtPosition(position));
 				//Log.d(TAG, unigram.getString());
 			}
 		});
 
         mSelectedInitialGridView.setVisibility(View.INVISIBLE);
 	}
-	
 
-	public void setSuggestions(List<UnigramStr> suggestions){
-		setSuggestions(suggestions, true);
-	}
-
-	/*
-	 * isSorted indicated whether suggestions has been sorted from high->low.
-	 * */
-	public void setSuggestions(List<UnigramStr> suggestions, boolean isSorted){
+	public void setSuggestions(List<String> suggestions){
 		mInitialCandidateAdapter.clear();
 		mSelectedInitialGridView.setVisibility(View.INVISIBLE);
-
 		
-		LinkedList<CandidateGroup> currentGroups = new LinkedList<CandidateGroup>();
+		//LinkedList<CandidateGroup> currentGroups = new LinkedList<CandidateGroup>();
+		CandidateGroup currentGroups = null;
 		
-		for(int i = 0; i < suggestions.size(); i++){
-			UnigramStr cur_suggestion = suggestions.get(i);
-
+		for(String i : suggestions){
 			// Make sure to SKIP empty candidate !!!!
-			if(cur_suggestion.getString().isEmpty()){
+			if(i.isEmpty()){
 				continue;
 			}
 
 			// Find a Candidate Group
-			CandidateGroup cg = null;
+			/*CandidateGroup cg = null;
 			for(int j = 0; j < currentGroups.size(); j++){
-				if(currentGroups.get(j).shouldInclude(cur_suggestion)){
+				if(currentGroups.get(j).shouldInclude(i)){
 					cg = currentGroups.get(j);
 					break;
 				}
 			}
-			
 			// If no group, create a new one
 			// else add them to the related group
-			if(cg == null){
-				currentGroups.add(new CandidateGroup(cur_suggestion));
+			*/
+			if(currentGroups == null){
+				currentGroups = new CandidateGroup(i);
 			}else{
-				cg.add(cur_suggestion, !isSorted);
+				currentGroups.add(i);
 			}
 		}
-		
-		for(int i = 0; i < currentGroups.size(); i++){
-			mInitialCandidateAdapter.add(currentGroups.get(i));
-		}
+		mInitialCandidateAdapter.add(currentGroups);
 	}
 
 }

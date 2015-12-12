@@ -21,31 +21,46 @@ import com.onekeyboard.ime.trie.*;
 
 public class Dictionary {
 	private static final String TAG = "Dictionary";
+	//private static String[] composing;
 	private Context mContext;
-	public static Trie mTrie;
+	private Trie mTrie;
 
 	/** Constructor */
-	public Dictionary(Context context, File dicPath){	
+	public Dictionary(Context context, File dicPath){
 		mContext = context;
 		mTrie = new Trie();
-		InputStream inptTUnigram = mContext.getResources().openRawResource(R.raw.dict);
-		Log.d(TAG, "BEGIN PARSE DICT");
-		try {
-			BufferedReader buffTUnigram = new BufferedReader(new InputStreamReader(inptTUnigram, "UTF-8"));
-	        String dLine;
-			while ((dLine = buffTUnigram.readLine()) != null) {	 
-				String[] line_split = dLine.split("\\t");
-				String[] phonetic = line_split[2].split("-| |\\|");
-				mTrie.addPhonetic(Arrays.asList(phonetic), line_split[0]);
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				InputStream inptTUnigram = mContext.getResources().openRawResource(R.raw.dict_part);
+				Log.d(TAG, "BEGIN PARSE DICT");
+				try {
+					BufferedReader buffTUnigram = new BufferedReader(new InputStreamReader(inptTUnigram, "UTF-8"));
+					String dLine;
+					while ((dLine = buffTUnigram.readLine()) != null) {
+						String[] line_split = dLine.split("\\t");
+						if(line_split.length == 1) Log.d(TAG, dLine);
+						String[] phonetic = line_split[1].split("-| |\\|");
+				/*for(int i = 0; i < phonetic.length; i++){
+					phonetic[i] = phonetic[i].replace("^", "");
+				}*/
+						//Log.d("Dictionary", "adding " + phonetic[0]);
+						mTrie.addPhonetic(Arrays.asList(phonetic), line_split[0]);
+					}
+				} catch (UnsupportedEncodingException e) {
+					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				Log.d(TAG, "END PARSE DICT");
+				String test[] = {"k", "o", "t"};
+				Log.d(TAG, "kot found, " + getCandidate(Arrays.asList(test)).toString());
 			}
-		} catch (UnsupportedEncodingException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		Log.d(TAG, "END PARSE DICT");
+		}).start();
 	}
-	public LinkedList<UnigramStr> getCandidates(String z){return new LinkedList<UnigramStr>();}
+	public List<String> getCandidate(List<String> composing){
+		return mTrie.getWord(composing);
+	}
 	/*public LinkedList<UnigramStr> getCandidates(String composing){
 		LinkedList<UnigramStr> candidateStr = new LinkedList<UnigramStr>();
 
@@ -56,13 +71,13 @@ public class Dictionary {
 		while(mTrie.predictive_search(agent)){
 			keyset.push_back(agent.key().str().getBytes());
 		}
-		
-		for(int i = 0; i < keyset.size(); i++){	
+
+		for(int i = 0; i < keyset.size(); i++){
 			candidateStr.addAll(candidateStr.size(), mMapRomanized2Thai.get(keyset.key_str(i)));
 		}
 		Collections.sort(candidateStr, Collections.reverseOrder());
 		Log.d(TAG, "candidateStr.size() = "+ candidateStr.size());
-		
+
 		return candidateStr;
 	}*/
 	 

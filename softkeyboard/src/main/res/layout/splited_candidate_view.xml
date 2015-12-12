@@ -12,10 +12,10 @@
     <GridView 
     	android:id				="@+id/selected_initial_candidate_list"
     	android:layout_width	="fill_parent"
-    	android:layout_height	="210dp"
+    	android:layout_height	="200dp"
     	android:layout_weight	="0.875"
     	android:numColumns		="3"
-    	android:background		="#FF0000FF"
+    	android:background		="#5000FFFF"
     	android:gravity			="center"
     	android:stretchMode		="columnWidth"
     />

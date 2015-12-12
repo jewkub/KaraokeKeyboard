@@ -40,6 +40,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -53,14 +54,14 @@ import com.onekeyboard.dict.UnigramStr;
  * a basic example for how you would get started writing an input method, to
  * be fleshed out as appropriate.
  */
-public class SoftKeyboard extends InputMethodService 
+public class SoftKeyboard extends InputMethodService
         implements KeyboardView.OnKeyboardActionListener {
 
     private static final String TAG = "SoftKeyboard";
-	private static final String UNIGRAM_ROMANIZED_MARISA_FN = "royal_best_dic";
-	//private static final String UNIGRAM_THAI_FN 			= "royal_best_tfreq";	// 1-1 		map
-	//private static final String MAP_ROMANIZED2THAI_FN 		= "royal_best_revmap";	// 1-many 	map
-    
+    private static final String UNIGRAM_ROMANIZED_MARISA_FN = "royal_best_dic";
+    //private static final String UNIGRAM_THAI_FN 			= "royal_best_tfreq";	// 1-1 		map
+    //private static final String MAP_ROMANIZED2THAI_FN 		= "royal_best_revmap";	// 1-many 	map
+
     /**
      * This boolean indicates the optional example code for performing
      * processing of hard keys in addition to regular text generation
@@ -76,26 +77,30 @@ public class SoftKeyboard extends InputMethodService
     private LatinKeyboardView 		mInputView;
     private SplitedCandidateView 	mCandidateView;
     private CompletionInfo[] 		mCompletions;
-    
+
     private StringBuilder 			mComposing = new StringBuilder();
+    private StringBuilder[]         mWordsDecomposing = new StringBuilder[5];
+    private List<List<String>>      mPhonetic = new ArrayList<List<String>>();
+    private boolean                 isVowel = false;
+    private boolean                 isFinalFilled = false;
     private boolean 				mPredictionOn;
     private boolean 				mCompletionOn;
     private int	 					mLastDisplayWidth;
     private boolean 				mCapsLock;
     private long 					mLastShiftTime;
     private long 					mMetaState;
-    
+
     private LatinKeyboard 			mSymbolsKeyboard;
     private LatinKeyboard 			mSymbolsShiftedKeyboard;
     private LatinKeyboard 			mQwertyKeyboard;
-    
+
     private LatinKeyboard 			mCurKeyboard;
-    
+
     private String 					mWordSeparators;
-    
+
     private Dictionary 				mDictionary;
     private int tmp = 1;
-    
+
     /**
      * Main initialization of the input method component.  Be sure to call
      * to super class.
@@ -104,7 +109,16 @@ public class SoftKeyboard extends InputMethodService
         super.onCreate();
         File intMemDir 	= this.getFilesDir();
         File dicFile 	= new File(intMemDir, UNIGRAM_ROMANIZED_MARISA_FN);
-        
+
+        /**
+         * Initialize mWordDecomposing[] and mPhonetics[]
+         */
+        for(int i = 0; i < 3; i++) {
+            mWordsDecomposing[i] = new StringBuilder();
+            mPhonetic.add(new ArrayList<String>());
+            //mPhonetics[i] = new StringBuilder();
+        }
+
         /*
          * NATIVE-JNI cannot easily access file either in assets/ or res/raw.
          * 
@@ -114,49 +128,49 @@ public class SoftKeyboard extends InputMethodService
         //boolean isFirstRun = true;
 
         SharedPreferences settings = getSharedPreferences("PREFS_NAME", 0);
-       // isFirstRun = settings.getBoolean("FIRST_RUN", true);
+        // isFirstRun = settings.getBoolean("FIRST_RUN", true);
         //if (isFirstRun) {
 
-        	Log.d(TAG, "Copying *.dic to Internal Memory.");
-        	// Copy *.dic to location where NATIVE-JNI can access them EASILY.
-        	InputStream ins = getResources().openRawResource(R.raw.royal_best_dic);
-        	ByteArrayOutputStream outputStream=new ByteArrayOutputStream();
-        	
-        	int size = 0;
-        	// Read the entire resource into a local byte buffer.
-        	byte[] readBuffer = new byte[1024];
-        	try {
-				while((size=ins.read(readBuffer, 0, 1024)) >= 0){
-					outputStream.write(readBuffer, 0, size);
-				}
-				ins.close();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-        	readBuffer=outputStream.toByteArray();
-        	
-			try {
-				FileOutputStream fos = new FileOutputStream(dicFile);
-				fos.write(readBuffer);
-				fos.close();
-			} catch (FileNotFoundException e) {
-				e.printStackTrace();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}        	
-        	
-        	settings						 	= getSharedPreferences("PREFS_NAME", 0);
-            SharedPreferences.Editor editor 	= settings.edit();
-            editor.putBoolean("FIRST_RUN", false);
-            editor.commit();
+        Log.d(TAG, "Copying *.dic to Internal Memory.");
+        // Copy *.dic to location where NATIVE-JNI can access them EASILY.
+        InputStream ins = getResources().openRawResource(R.raw.royal_best_dic);
+        ByteArrayOutputStream outputStream=new ByteArrayOutputStream();
+
+        int size = 0;
+        // Read the entire resource into a local byte buffer.
+        byte[] readBuffer = new byte[1024];
+        try {
+            while((size=ins.read(readBuffer, 0, 1024)) >= 0){
+                outputStream.write(readBuffer, 0, size);
+            }
+            ins.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        readBuffer=outputStream.toByteArray();
+
+        try {
+            FileOutputStream fos = new FileOutputStream(dicFile);
+            fos.write(readBuffer);
+            fos.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        settings						 	= getSharedPreferences("PREFS_NAME", 0);
+        SharedPreferences.Editor editor 	= settings.edit();
+        editor.putBoolean("FIRST_RUN", false);
+        editor.commit();
         //}
-        
+
         mInputMethodManager = (InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
         mWordSeparators 	= getResources().getString(R.string.word_separators);
-        
+
         mDictionary = new Dictionary(this, dicFile);
     }
-    
+
     /**
      * This is the point where you can do all of your UI initialization.  It
      * is called after creation and any configuration change.
@@ -174,7 +188,7 @@ public class SoftKeyboard extends InputMethodService
         mSymbolsKeyboard = new LatinKeyboard(this, R.xml.symbols);
         mSymbolsShiftedKeyboard = new LatinKeyboard(this, R.xml.symbols_shift);
     }
-    
+
     /**
      * Called by the framework when your view for creating input needs to
      * be generated.  This will be called the first time your input method
@@ -195,9 +209,9 @@ public class SoftKeyboard extends InputMethodService
      * be generated, like {@link #onCreateInputView}.
      */
     @Override public View onCreateCandidatesView() {
-    	mCandidateView = (SplitedCandidateView) getLayoutInflater().inflate(R.layout.splited_candidate_view, null);
-    	
-    	mCandidateView.init(this);
+        mCandidateView = (SplitedCandidateView) getLayoutInflater().inflate(R.layout.splited_candidate_view, null);
+
+        mCandidateView.init(this);
 
         return mCandidateView;
     }
@@ -210,21 +224,21 @@ public class SoftKeyboard extends InputMethodService
      */
     @Override public void onStartInput(EditorInfo attribute, boolean restarting) {
         super.onStartInput(attribute, restarting);
-        
+
         // Reset our state.  We want to do this even if restarting, because
         // the underlying state of the text editor could have changed in any way.
         mComposing.setLength(0);
         updateCandidates();
-        
+
         if (!restarting) {
             // Clear shift states.
             mMetaState = 0;
         }
-        
+
         mPredictionOn = false;
         mCompletionOn = false;
         mCompletions = null;
-        
+
         // We are now going to initialize our state based on the type of
         // text being edited.
         switch (attribute.inputType & InputType.TYPE_MASK_CLASS) {
@@ -234,13 +248,13 @@ public class SoftKeyboard extends InputMethodService
                 // no extra features.
                 mCurKeyboard = mSymbolsKeyboard;
                 break;
-                
+
             case InputType.TYPE_CLASS_PHONE:
                 // Phones will also default to the symbols keyboard, though
                 // often you will want to have a dedicated phone keyboard.
                 mCurKeyboard = mSymbolsKeyboard;
                 break;
-                
+
             case InputType.TYPE_CLASS_TEXT:
                 // This is general text editing.  We will default to the
                 // normal alphabetic keyboard, and assume that we should
@@ -248,7 +262,7 @@ public class SoftKeyboard extends InputMethodService
                 // user types).
                 mCurKeyboard = mQwertyKeyboard;
                 mPredictionOn = true;
-                
+
                 // We now look for a few special variations of text that will
                 // modify our behavior.
                 int variation = attribute.inputType & InputType.TYPE_MASK_VARIATION;
@@ -258,7 +272,7 @@ public class SoftKeyboard extends InputMethodService
                     // when they are entering a password.
                     mPredictionOn = false;
                 }
-                
+
                 if (variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
                         || variation == InputType.TYPE_TEXT_VARIATION_URI
                         || variation == InputType.TYPE_TEXT_VARIATION_FILTER) {
@@ -266,7 +280,7 @@ public class SoftKeyboard extends InputMethodService
                     // or URIs.
                     mPredictionOn = false;
                 }
-                
+
                 if ((attribute.inputType & InputType.TYPE_TEXT_FLAG_AUTO_COMPLETE) != 0) {
                     // If this is an auto-complete text view, then our predictions
                     // will not be shown and instead we will allow the editor
@@ -276,20 +290,20 @@ public class SoftKeyboard extends InputMethodService
                     mPredictionOn = false;
                     mCompletionOn = isFullscreenMode();
                 }
-                
+
                 // We also want to look at the current state of the editor
                 // to decide whether our alphabetic keyboard should start out
                 // shifted.
                 updateShiftKeyState(attribute);
                 break;
-                
+
             default:
                 // For all unknown input types, default to the alphabetic
                 // keyboard with no special features.
                 mCurKeyboard = mQwertyKeyboard;
                 updateShiftKeyState(attribute);
         }
-        
+
         // Update the label on the enter key, depending on what the application
         // says it will do.
         mCurKeyboard.setImeOptions(getResources(), attribute.imeOptions);
@@ -301,23 +315,23 @@ public class SoftKeyboard extends InputMethodService
      */
     @Override public void onFinishInput() {
         super.onFinishInput();
-        
+
         // Clear current composing text and candidates.
         mComposing.setLength(0);
         updateCandidates();
-        
+
         // We only hide the candidates window when finishing input on
         // a particular editor, to avoid popping the underlying application
         // up and down if the user is entering text into the bottom of
         // its window.
         setCandidatesViewShown(false);
-        
+
         mCurKeyboard = mQwertyKeyboard;
         if (mInputView != null) {
             mInputView.closing();
         }
     }
-    
+
     @Override public void onStartInputView(EditorInfo attribute, boolean restarting) {
         super.onStartInputView(attribute, restarting);
         // Apply the selected keyboard to the input view.
@@ -336,11 +350,11 @@ public class SoftKeyboard extends InputMethodService
      * Deal with the editor reporting movement of its cursor.
      */
     @Override public void onUpdateSelection(int oldSelStart, int oldSelEnd,
-            int newSelStart, int newSelEnd,
-            int candidatesStart, int candidatesEnd) {
+                                            int newSelStart, int newSelEnd,
+                                            int candidatesStart, int candidatesEnd) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd,
                 candidatesStart, candidatesEnd);
-        
+
         // If the current selection in the text view changes, we should
         // clear whatever candidate text we have.
         if (mComposing.length() > 0 && (newSelStart != candidatesEnd
@@ -367,7 +381,7 @@ public class SoftKeyboard extends InputMethodService
                 setSuggestions(null);
                 return;
             }
-            
+
             List<String> stringList = new ArrayList<String>();
             for (int i = 0; i < completions.length; i++) {
                 CompletionInfo ci = completions[i];
@@ -377,7 +391,7 @@ public class SoftKeyboard extends InputMethodService
             setSuggestions(null);
         }
     }
-    
+
     /**
      * This translates incoming hard key events in to edit operations on an
      * InputConnection.  It is only needed when using the
@@ -392,14 +406,14 @@ public class SoftKeyboard extends InputMethodService
         if (c == 0 || ic == null) {
             return false;
         }
-        
+
         boolean dead = false;
 
         if ((c & KeyCharacterMap.COMBINING_ACCENT) != 0) {
             dead = true;
             c = c & KeyCharacterMap.COMBINING_ACCENT_MASK;
         }
-        
+
         if (mComposing.length() > 0) {
             char accent = mComposing.charAt(mComposing.length() -1 );
             int composed = KeyEvent.getDeadChar(accent, c);
@@ -409,12 +423,12 @@ public class SoftKeyboard extends InputMethodService
                 mComposing.setLength(mComposing.length()-1);
             }
         }
-        
+
         onKey(c, null);
-        
+
         return true;
     }
-    
+
     /**
      * Use this to monitor key events being delivered to the application.
      * We get first crack at them, and can either resume them or let them
@@ -433,7 +447,7 @@ public class SoftKeyboard extends InputMethodService
                     }
                 }
                 break;
-                
+
             case KeyEvent.KEYCODE_DEL:
                 // Special handling of the delete key: if we currently are
                 // composing text for the user, we want to modify that instead
@@ -443,11 +457,11 @@ public class SoftKeyboard extends InputMethodService
                     return true;
                 }
                 break;
-                
+
             case KeyEvent.KEYCODE_ENTER:
                 // Let the underlying text editor always handle these.
                 return false;
-                
+
             default:
                 // For all other keys, if we want to do transformations on
                 // text being entered with a hard keyboard, we need to process
@@ -515,7 +529,7 @@ public class SoftKeyboard extends InputMethodService
      * editor state.
      */
     private void updateShiftKeyState(EditorInfo attr) {
-        if (attr != null 
+        if (attr != null
                 && mInputView != null && mQwertyKeyboard == mInputView.getKeyboard()) {
             int caps = 0;
             EditorInfo ei = getCurrentInputEditorInfo();
@@ -525,7 +539,7 @@ public class SoftKeyboard extends InputMethodService
             mInputView.setShifted(mCapsLock || caps != 0);
         }
     }
-    
+
     /**
      * Helper to determine if a given character code is alphabetic.
      */
@@ -536,7 +550,7 @@ public class SoftKeyboard extends InputMethodService
             return false;
         }
     }
-    
+
     /**
      * Helper to send a key down / key up pair to the current editor.
      */
@@ -546,7 +560,7 @@ public class SoftKeyboard extends InputMethodService
         getCurrentInputConnection().sendKeyEvent(
                 new KeyEvent(KeyEvent.ACTION_UP, keyEventCode));
     }
-    
+
     /**
      * Helper to send a character to the editor as raw key events.
      */
@@ -568,16 +582,32 @@ public class SoftKeyboard extends InputMethodService
     // Implementation of KeyboardViewListener
 
     public void onKey(int primaryCode, int[] keyCodes) {
+        for (List<String> l : mPhonetic) {
+            l.clear();
+        }
         if (isWordSeparator(primaryCode)) {
             // Handle separator
-            Toast.makeText(SoftKeyboard.this, "test" + tmp++, Toast.LENGTH_SHORT).show();
+            // Toast.makeText(SoftKeyboard.this, "test" + tmp++, Toast.LENGTH_SHORT).show();
             if (mComposing.length() > 0) {
                 commitTyped(getCurrentInputConnection());
             }
             sendKey(primaryCode);
             updateShiftKeyState(getCurrentInputEditorInfo());
+            for(StringBuilder i : mWordsDecomposing)
+                i.delete(0, i.length());
+            isVowel = false;
+            isFinalFilled = false;
         } else if (primaryCode == Keyboard.KEYCODE_DELETE) {
             handleBackspace();
+            for(int i = 0; i < mWordsDecomposing.length; i++){
+                mWordsDecomposing[i] = new StringBuilder();
+            }
+            isVowel = false;
+            isFinalFilled = false;
+            for(int i = 0; i < mComposing.length(); i++) {
+                wordsDecomposing(mComposing.charAt(i));
+            }
+            getPhonetics();
         } else if (primaryCode == Keyboard.KEYCODE_SHIFT) {
             handleShift();
         } else if (primaryCode == Keyboard.KEYCODE_CANCEL) {
@@ -598,7 +628,7 @@ public class SoftKeyboard extends InputMethodService
                 current.setShifted(false);
             }
         } else {
-            handleCharacter(primaryCode, keyCodes);
+            handleCharacter((char) primaryCode, keyCodes);
         }
     }
 
@@ -622,18 +652,46 @@ public class SoftKeyboard extends InputMethodService
     private void updateCandidates() {
         if (!mCompletionOn) {
             if (mComposing.length() > 0) {
-                ArrayList<String> list = new ArrayList<String>();
-                
                 /*Modify the candiate list here*/
-                LinkedList<UnigramStr> candidateList = mDictionary.getCandidates(mComposing.toString());
-                setSuggestions(candidateList);
+                List<List<String>> s = new LinkedList<List<String>>();
+                List<String> candidateList = new LinkedList<String>();
+                s = matchAll(mPhonetic);
+                if(s.isEmpty()) Log.d(TAG, "matchAll is empty = =");
+                for(List<String> l : s){
+                    Log.d(TAG, "phonetic = " + l.toString());
+                    List<String> subCandidate = mDictionary.getCandidate(l);
+                    if(subCandidate != null) candidateList.addAll(subCandidate);
+                }
+                Log.d(TAG, "found, " + candidateList.toString());
+                if(!candidateList.isEmpty())setSuggestions(candidateList);
             } else {
                 setSuggestions(null);
             }
         }
     }
-    
-    public void setSuggestions(List<UnigramStr> suggestions) {
+    public List<List<String>> matchAll(List<List<String>> L){
+        List<List<String>> sum = new LinkedList<List<String>>();
+        List<List<String>> subList = new LinkedList<List<String>>(L);
+        subList.remove(0);
+        while(!subList.isEmpty() && subList.get(0).isEmpty()){
+            subList.remove(0);
+        }
+        for (String s : L.get(0)) {
+            if(subList.isEmpty()){
+                List<String> zz = new LinkedList<String>();
+                zz.add(s);
+                sum.add(zz);
+            }
+            else {
+                for (List<String> l : matchAll(subList)) {
+                    l.add(0, s);
+                    sum.add(l);
+                }
+            }
+        }
+        return sum;
+    }
+    public void setSuggestions(List<String> suggestions) {
         if (suggestions != null && suggestions.size() > 0) {
             setCandidatesViewShown(true);
         } else if (isExtractViewShown()) {
@@ -641,10 +699,10 @@ public class SoftKeyboard extends InputMethodService
         }
 
         if (mCandidateView != null && suggestions != null) {
-        	mCandidateView.setSuggestions(suggestions);
+            mCandidateView.setSuggestions(suggestions);
         }
     }
-    
+
     private void handleBackspace() {
         final int length = mComposing.length();
         if (length > 1) {
@@ -665,7 +723,7 @@ public class SoftKeyboard extends InputMethodService
         if (mInputView == null) {
             return;
         }
-        
+
         Keyboard currentKeyboard = mInputView.getKeyboard();
         if (mQwertyKeyboard == currentKeyboard) {
             // Alphabet keyboard
@@ -681,21 +739,25 @@ public class SoftKeyboard extends InputMethodService
             mSymbolsKeyboard.setShifted(false);
         }
     }
-    
-    private void handleCharacter(int primaryCode, int[] keyCodes) {
+
+    private void handleCharacter(char primaryCode, int[] keyCodes) {
         if (isInputViewShown()) {
             if (mInputView.isShifted()) {
                 primaryCode = Character.toUpperCase(primaryCode);
             }
         }
         if (isAlphabet(primaryCode) && mPredictionOn) {
-            mComposing.append((char) primaryCode);
+            mComposing.append(primaryCode);
             getCurrentInputConnection().setComposingText(mComposing, 1);
             updateShiftKeyState(getCurrentInputEditorInfo());
+            wordsDecomposing(primaryCode);
+            Log.d(TAG, "1 = " + mWordsDecomposing[0].toString());
+            Log.d(TAG, "2 = " + mWordsDecomposing[1].toString());
+            Log.d(TAG, "3 = " + mWordsDecomposing[2].toString());
+            getPhonetics();
             updateCandidates();
         } else {
-            getCurrentInputConnection().commitText(
-                    String.valueOf((char) primaryCode), 1);
+            getCurrentInputConnection().commitText(String.valueOf(primaryCode), 1);
         }
     }
 
@@ -714,27 +776,165 @@ public class SoftKeyboard extends InputMethodService
             mLastShiftTime = now;
         }
     }
-    
+
     private String getWordSeparators() {
         return mWordSeparators;
     }
-    
+
+    /**
+     * Check the character whether it is consonant or not.
+     */
+    private boolean isConsonant(char code) {
+        if (code =='a' || code == 'e' || code == 'i' || code == 'o' || code == 'u')
+            return false;
+        return true;
+    }
+
+    /**
+     * Composes the words into initial consonants, vowel, and final consonants.
+     */
+    private void wordsDecomposing(char code) {
+        if (code == 'r') {
+            if (isVowel) {                      //-ar, -or
+                mWordsDecomposing[1].append("" + code);      //'r' is vowel.
+            } else {
+                mWordsDecomposing[0].append("" + code);      //'r' is initial consonant.
+            }
+        }
+        else if (isConsonant(code)) {               //Consonant cases
+            if (isVowel) {
+                mWordsDecomposing[2].append("" + code);      //Final
+            } else {
+                mWordsDecomposing[0].append("" + code);      //Initial
+            }
+        } else {                                  //Vowel cases
+            mWordsDecomposing[1].append("" + code);
+            isVowel = true;                     //Mark that vowel is found.
+        }
+    }
+
+    /**
+     * Compare two Strings
+     */
+    private boolean isEqual(int type,String secondKey) {
+        return mWordsDecomposing[type].toString().equals(secondKey);
+    }
+
+    /**
+     * Convert from words to phonetics
+     */
+    private void getPhonetics() {
+        //Initial consonant
+        if (mWordsDecomposing[0].length() == 0) {
+            mPhonetic.get(0).add("z");
+        } else if (isEqual(0, "y")) {
+            mPhonetic.get(0).add("j");
+        } else {
+            mPhonetic.get(0).add(mWordsDecomposing[0].toString());
+        }
+        //Vowel
+        if (isEqual(1, "a")) {              //-a
+            mPhonetic.get(1).add("a");
+        } else if (isEqual(1, "aa")) {      //-aa
+            mPhonetic.get(1).add("aa");
+        } else if (isEqual(1, "e")) {       //short & long -e
+            mPhonetic.get(1).add("e");
+            mPhonetic.get(1).add("ee");
+        } else if (isEqual(1, "i")) {       //short -i
+            mPhonetic.get(1).add("i");
+        } else if (isEqual(1, "ee")) {      //-ee -> -ii
+            mPhonetic.get(1).add("ii");
+        } else if (isEqual(1, "oo")) {      //-oo
+            mPhonetic.get(1).add("oo");
+        } else if (isEqual(1, "o")) {       //-o
+            mPhonetic.get(1).add("o");
+        } else if (isEqual(1, "u")) {       //-u
+            mPhonetic.get(1).add("u");
+        } else if (isEqual(1, "uu")) {      //-uu
+            mPhonetic.get(1).add("uu");
+        } else if (isEqual(1, "oe")) {      //short &long -oe
+            mPhonetic.get(1).add("q");
+            mPhonetic.get(1).add("qq");
+        } else if (isEqual(1, "ae")) {      //short & long -ae
+            mPhonetic.get(1).add("x");
+            mPhonetic.get(1).add("xx");
+        } else if (isEqual(1, "ue")) {      //short & long -ue
+            mPhonetic.get(1).add("v");
+            mPhonetic.get(1).add("vv");
+        } else if (isEqual(1, "or")) {      //short & long -or
+            mPhonetic.get(1).add("@");
+            mPhonetic.get(1).add("@@");
+        } else if (isEqual(1, "uea")) {     //-uea -> -vva
+            mPhonetic.get(1).add("vva");
+        } else if (isEqual(1, "ua")) {      //-ua -> -uua
+            mPhonetic.get(1).add("uua");
+        } else if (isEqual(1, "ia")) {      //short & long -ia
+            mPhonetic.get(1).add("ia");
+            mPhonetic.get(1).add("iia");
+        } else if (isEqual(1, "iao")) {     //-iao -> -iia + w
+            mPhonetic.get(1).add("iia");
+            mPhonetic.get(2).add("w");
+            isFinalFilled = true;
+        } else if (isEqual(1, "ai")) {      //-ai -> -a + j
+            mPhonetic.get(1).add("a");
+            mPhonetic.get(2).add("j");
+            isFinalFilled = true;
+        } else if (isEqual(1, "oi")) {      //-oi -> -@@ + j
+            mPhonetic.get(1).add("@@");
+            mPhonetic.get(2).add("j");
+            isFinalFilled = true;
+        } else if (isEqual(1, "ui")) {      //-ui -> -u + j
+            mPhonetic.get(1).add("u");
+            mPhonetic.get(2).add("j");
+            isFinalFilled = true;
+        } else if (isEqual(1, "ao")) {      //-ao -> -a + w
+            mPhonetic.get(1).add("a");
+            mPhonetic.get(2).add("w");
+            isFinalFilled = true;
+        } else if (isEqual(1, "ueai")) {    //-ueai -> -vva + j
+            mPhonetic.get(1).add("vva");
+            mPhonetic.get(2).add("j");
+            isFinalFilled = true;
+        } else if (isEqual(1, "aeo")) {     //-aeo -> -xx + w
+            mPhonetic.get(1).add("xx");
+            mPhonetic.get(2).add("w");
+            isFinalFilled = true;
+        } else if (isEqual(1, "oei")) {     //-oei -> -qq + j
+            mPhonetic.get(1).add("qq");
+            mPhonetic.get(2).add("j");
+            isFinalFilled = true;
+        } else if (isEqual(1, "uai")) {     //-uai -> -uua + j
+            mPhonetic.get(1).add("uua");
+            mPhonetic.get(2).add("j");
+            isFinalFilled = true;
+        }
+        //Final consonants
+        if (isFinalFilled)          //If final consonants are filled, do nothing.
+            return ;
+        if (mWordsDecomposing[2].length() == 0) {
+            mPhonetic.get(2).add("z");
+        } else {
+            mPhonetic.get(2).add(mWordsDecomposing[2].toString());
+        }
+        Log.d(TAG, mPhonetic.get(0).toString() + mPhonetic.get(1).toString() + mPhonetic.get(2).toString());
+    }
+
     public boolean isWordSeparator(int code) {
         String separators = getWordSeparators();
         return separators.contains(String.valueOf((char)code));
     }
-    
+
     public void commitSuggestion(String chosen_string){
-    	InputConnection ic = getCurrentInputConnection();
-    	ic.commitText(chosen_string, 1);
-    	mComposing.setLength(0);
-    	updateCandidates();
+        InputConnection ic = getCurrentInputConnection();
+        ic.commitText(chosen_string, 1);
+        mComposing.setLength(0);
+        updateCandidates();
     }
 
     public void pickDefaultCandidate() {
         pickSuggestionManually(0);
     }
-    
+
     public void pickSuggestionManually(int index) {
         if (mCompletionOn && mCompletions != null && index >= 0
                 && index < mCompletions.length) {
@@ -751,21 +951,21 @@ public class SoftKeyboard extends InputMethodService
             // we will just commit the current text.
             commitTyped(getCurrentInputConnection());
         	*/
-        	
+
             InputConnection ic = getCurrentInputConnection();
             //ic.commitText(mCandidateView.getSuggestions(index), 1);
             mComposing.setLength(0);
             updateCandidates();
-            
+
         }
     }
-    
+
     public void swipeRight() {
         if (mCompletionOn) {
             pickDefaultCandidate();
         }
     }
-    
+
     public void swipeLeft() {
         handleBackspace();
     }
@@ -776,10 +976,10 @@ public class SoftKeyboard extends InputMethodService
 
     public void swipeUp() {
     }
-    
+
     public void onPress(int primaryCode) {
     }
-    
+
     public void onRelease(int primaryCode) {
     }
 }

@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.onekeyboard.ime">
 <uses-sdk android:maxSdkVersion="21"/>
-    <application android:label="@string/ime_name" android:icon="@mipmap/ic_launcher" android:logo="@mipmap/ic_launcher">
+    <application android:label="@string/ime_name" android:icon="@mipmap/ic_launcher" android:logo="@mipmap/ic_launcher" android:largeHeap="true">
         <service android:name=".SoftKeyboard" android:permission="android.permission.BIND_INPUT_METHOD">
             <intent-filter>
                 <action android:name="android.view.InputMethod" />
