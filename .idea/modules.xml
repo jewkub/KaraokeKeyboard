@@ -3,7 +3,6 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/KaraokeKeyboard.iml" filepath="$PROJECT_DIR$/KaraokeKeyboard.iml" />
-      <module fileurl="file://$PROJECT_DIR$/androidHorizontalListView/androidHorizontalListView.iml" filepath="$PROJECT_DIR$/androidHorizontalListView/androidHorizontalListView.iml" />
       <module fileurl="file://$PROJECT_DIR$/softkeyboard/softkeyboard.iml" filepath="$PROJECT_DIR$/softkeyboard/softkeyboard.iml" />
     </modules>
   </component>

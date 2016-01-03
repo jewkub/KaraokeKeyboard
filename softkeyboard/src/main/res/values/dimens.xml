@@ -20,7 +20,10 @@
 
 <resources>
     <dimen name="key_height">50dip</dimen>
-    <dimen name="candidate_font_height">16sp</dimen>
-    <dimen name="candidate_vertical_padding">30sp</dimen>
+
+    <dimen name="candidate_font_size">20sp</dimen>
+    <dimen name="candidate_font_height">40sp</dimen>
+
+    <dimen name="candidate_height">120dp</dimen>
     <dimen name="main_candidate_grid_height">40sp</dimen>
 </resources>
