@@ -48,7 +48,7 @@ public class CandidateView extends LinearLayout{
         mGridView.setVisibility(View.VISIBLE);
 
 		mProgressBar = (ProgressBar) findViewById(R.id.progressbar);
-		mProgressBar.setVisibility(View.VISIBLE);
+		if(!parent.loadFinished) mProgressBar.setVisibility(View.VISIBLE);
 	}
 
 	public void setSuggestions(List<String> suggestions){

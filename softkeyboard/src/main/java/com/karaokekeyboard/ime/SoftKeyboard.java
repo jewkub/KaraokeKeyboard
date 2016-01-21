@@ -16,6 +16,11 @@
 
 package com.karaokekeyboard.ime;
 
+import android.content.ContentValues;
+import android.content.Context;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteException;
 import android.inputmethodservice.InputMethodService;
 import android.inputmethodservice.Keyboard;
 import android.inputmethodservice.KeyboardView;
@@ -32,6 +37,8 @@ import android.view.inputmethod.InputMethodManager;
 import android.view.inputmethod.InputMethodSubtype;
 import android.widget.ProgressBar;
 
+import com.karaokekeyboard.database.DatabaseContract;
+import com.karaokekeyboard.database.DbHelper;
 import com.karaokekeyboard.dict.Dictionary;
 
 import java.util.ArrayList;
@@ -64,7 +71,9 @@ public class SoftKeyboard extends InputMethodService
 
     private LatinKeyboardView 		mInputView;
     private CandidateView           mCandidateView;
+    public boolean                  loadFinished;
     public void closeProgressBar(){
+        loadFinished = true;
         if(mCandidateView != null){
             //setCandidatesViewShown(false);
             mCandidateView.closeProgressBar();
@@ -114,6 +123,8 @@ public class SoftKeyboard extends InputMethodService
     private String 					mWordSeparators;
 
     private Dictionary 				mDictionary;
+    private SQLiteDatabase          mDb;
+    private Context           mContext;
 
     /**
      * Main initialization of the input method component.  Be sure to call
@@ -123,6 +134,7 @@ public class SoftKeyboard extends InputMethodService
         Log.d("CallBack", "onCreate!");
         super.onCreate();
 
+        loadFinished = false;
         /**
          * Initialize mWordDecomposing and mPhonetic
          */
@@ -138,10 +150,17 @@ public class SoftKeyboard extends InputMethodService
          * Internal Memory.
          * */
 
+        mContext = this;
         mCandidateView = null;
         mInputMethodManager = (InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
         mWordSeparators 	= getResources().getString(R.string.word_separators);
         mDictionary = new Dictionary(this, this);
+        new Thread() {
+            @Override
+            public void run() {
+                mDb = (new DbHelper(mContext)).getWritableDatabase();
+            }
+        }.start();
     }
 
     /**
@@ -552,7 +571,7 @@ public class SoftKeyboard extends InputMethodService
             mWordsDecomposing.add(new KaraokeWord());
             for(int i = 0; i < mComposing.length(); i++) {
                 if(!isSyllableSeparator(mComposing.charAt(i))) wordsDecomposing(mComposing.charAt(i));
-                else mWordsDecomposing.add(new KaraokeWord());
+                else if(mWordsDecomposing.size() < 4) mWordsDecomposing.add(new KaraokeWord());
             }
             getPhonetics(0);
             updateCandidates();
@@ -611,8 +630,44 @@ public class SoftKeyboard extends InputMethodService
                     if(subCandidate != null) candidateList.addAll(subCandidate);
                     else Log.d(TAG, "zzz");
                 }
+                //
+                if(candidateList.isEmpty()) {
+                    setSuggestions(candidateList);
+                    return ;
+                }
+                List<String> sorted = new LinkedList<>();
+                String[] projection = {
+                        DatabaseContract.Frequency.COLUMN_NAME_WORD,
+                        DatabaseContract.Frequency.COLUMN_NAME_FREQ
+                };
+                String dump = DatabaseContract.Frequency.COLUMN_NAME_WORD + "=?";
+                int i = candidateList.size();
+                StringBuilder query = new StringBuilder(dump);
+                while(i-- > 0){
+                    query.append(" or ").append(dump);
+                }
+                //Log.d(TAG, "query command is : " + query);
+                Cursor c = mDb.query(DatabaseContract.Frequency.TABLE_NAME, projection,
+                        query.toString(),
+                        candidateList.toArray(new String[1]),
+                        null, null, DatabaseContract.Frequency.COLUMN_NAME_FREQ + " DESC");
+                //if(c.getCount() == 0) setSuggestions(candidateList);
+                c.moveToFirst();
+                while(!c.isAfterLast()) {
+                    sorted.add(c.getString(c.getColumnIndexOrThrow(DatabaseContract.Frequency.COLUMN_NAME_WORD)));
+                    Log.d(TAG, "Just added " + sorted.get(sorted.size()-1));
+                    c.moveToNext();
+                }
+                for(String ss : candidateList){
+                    if(!sorted.contains(ss)) sorted.add(ss);
+                }
+                Log.d(TAG, "candidateList is: " + candidateList.toString());
+                Log.d(TAG, "sorted is : " + sorted.toString());
+                c.close();
+                //
                 Log.d(TAG, "found, " + candidateList.toString());
-                setSuggestions(candidateList);
+                Log.d(TAG, "sorted, " + sorted.toString());
+                setSuggestions(sorted);
             } else {
                 setSuggestions(new LinkedList<String>());
             }
@@ -710,7 +765,7 @@ public class SoftKeyboard extends InputMethodService
             mComposing.append(primaryCode);
             getCurrentInputConnection().setComposingText(mComposing, 1);
             updateShiftKeyState(getCurrentInputEditorInfo());
-            mWordsDecomposing.add(new KaraokeWord());
+            if(mWordsDecomposing.size() < 4) mWordsDecomposing.add(new KaraokeWord());
         } else {
             if (mComposing.length() > 0) {
                 commitTyped(getCurrentInputConnection());
@@ -766,7 +821,7 @@ public class SoftKeyboard extends InputMethodService
                 mWordsDecomposing.get(-1).consonant.append(code);      //Initial
             }
         } else {                                  //Vowel cases
-            if(mWordsDecomposing.get(-1).isVowel && mWordsDecomposing.get(-1).terminal.length() > 0) throw new UnsupportedOperationException("Vowel after consonant is not allowed right now.");
+            //if(mWordsDecomposing.get(-1).isVowel && mWordsDecomposing.get(-1).terminal.length() > 0) throw new UnsupportedOperationException("Vowel after consonant is not allowed right now.");
             mWordsDecomposing.get(-1).vowel.append(code);
             mWordsDecomposing.get(-1).isVowel = true;                     //Mark that vowel is found.
         }
@@ -820,6 +875,8 @@ public class SoftKeyboard extends InputMethodService
         //Vowel
         if (isEqual(syllable, 1, "a")) {              //-a
             mPhonetic.get(3*syllable + 1).add("a");
+        } else if (isEqual(syllable, 1, "ar")) {      //-aa
+            mPhonetic.get(3*syllable + 1).add("aa");
         } else if (isEqual(syllable, 1, "aa")) {      //-aa
             mPhonetic.get(3*syllable + 1).add("aa");
         } else if (isEqual(syllable, 1, "e")) {       //short & long -e
@@ -829,22 +886,24 @@ public class SoftKeyboard extends InputMethodService
             mPhonetic.get(3*syllable + 1).add("i");
         } else if (isEqual(syllable, 1, "ee")) {      //-ee -> -ii
             mPhonetic.get(3*syllable + 1).add("ii");
-        } else if (isEqual(syllable, 1, "oo")) {      //-oo, -uu
+        } else if (isEqual(syllable, 1, "oo")) {      //-oo, -u, -uu
             mPhonetic.get(3*syllable + 1).add("oo");
+            mPhonetic.get(3*syllable + 1).add("u");
             mPhonetic.get(3*syllable + 1).add("uu");
         } else if (isEqual(syllable, 1, "o")) {       //-o
             mPhonetic.get(3*syllable + 1).add("o");
+            mPhonetic.get(3*syllable + 1).add("oo");
         } else if (isEqual(syllable, 1, "u")) {       //-u
             mPhonetic.get(3*syllable + 1).add("u");
         } else if (isEqual(syllable, 1, "uu")) {      //-uu
             mPhonetic.get(3*syllable + 1).add("uu");
         } else if (isEqual(syllable, 1, "oe")) {      //short &long -oe
             mPhonetic.get(3*syllable + 1).add("q");
-            mPhonetic.get(3*syllable + 2).add("qq");
-        } else if (isEqual(syllable, 2, "ur")) {      //long -oe
-            mPhonetic.get(3*syllable + 2).add("qq");
-        } else if (isEqual(syllable, 2, "er")) {      //long -oe
-            mPhonetic.get(3*syllable + 2).add("qq");
+            mPhonetic.get(3*syllable + 1).add("qq");
+        } else if (isEqual(syllable, 1, "ur")) {      //long -oe
+            mPhonetic.get(3*syllable + 1).add("qq");
+        } else if (isEqual(syllable, 1, "er")) {      //long -oe
+            mPhonetic.get(3*syllable + 1).add("qq");
         } else if (isEqual(syllable, 1, "ae")) {      //short & long -ae
             mPhonetic.get(3*syllable + 1).add("x");
             mPhonetic.get(3*syllable + 1).add("xx");
@@ -902,8 +961,8 @@ public class SoftKeyboard extends InputMethodService
             mPhonetic.get(3*syllable + 1).add("uua");
             mPhonetic.get(3*syllable + 2).add("j");
             mWordsDecomposing.get(syllable).isFinalFilled = true;
-        } else if (isEqual(syllable, 2, "uay")) {      //long -oe
-            mPhonetic.get(3*syllable + 2).add("uua");
+        } else if (isEqual(syllable, 1, "uay")) {      //long -oe
+            mPhonetic.get(3*syllable + 1).add("uua");
             mPhonetic.get(3*syllable + 2).add("j");
             mWordsDecomposing.get(syllable).isFinalFilled = true;
         }
@@ -943,6 +1002,33 @@ public class SoftKeyboard extends InputMethodService
     public void commitSuggestion(String chosen_string){
         InputConnection ic = getCurrentInputConnection();
         ic.commitText(chosen_string, 1);
+        // db here
+        String[] projection = {
+                DatabaseContract.Frequency.COLUMN_NAME_FREQ
+        };
+        Cursor c = mDb.query(DatabaseContract.Frequency.TABLE_NAME, projection,
+                DatabaseContract.Frequency.COLUMN_NAME_WORD + "=?",
+                new String[] {chosen_string},
+                null, null, null);
+        int tmp = c.getCount();
+        if(tmp > 1) throw new SQLiteException("Why got more than 1 words ?");
+        else if(tmp == 0){
+            ContentValues value = new ContentValues();
+            value.put(DatabaseContract.Frequency.COLUMN_NAME_WORD, chosen_string);
+            value.put(DatabaseContract.Frequency.COLUMN_NAME_FREQ, 1);
+            mDb.insertOrThrow(DatabaseContract.Frequency.TABLE_NAME, null, value);
+        }
+        else {
+            c.moveToFirst();
+            int freq = c.getInt(c.getColumnIndexOrThrow(DatabaseContract.Frequency.COLUMN_NAME_FREQ));
+            ContentValues value = new ContentValues();
+            value.put(DatabaseContract.Frequency.COLUMN_NAME_FREQ, freq+1);
+            mDb.update(DatabaseContract.Frequency.TABLE_NAME,
+                    value,
+                    DatabaseContract.Frequency.COLUMN_NAME_WORD + "=?",
+                    new String[] {chosen_string});
+        }
+        c.close();
         refresh();
     }
 
